@@ -4,15 +4,13 @@ import json
 import os
 import sys
 import tempfile
-from threading import Lock
 
 sys.path.insert(0, os.path.dirname(__file__))
 
 from calendarCall import (
-    DEFAULT_REFRESH_SECONDS,
-    createSettingsServer,
     fetchCals,
-    parseRefreshFrequency,
+    DEFAULT_SCAN_INTERVAL_SECONDS,
+    loadScanIntervalSeconds,
 )
 
 
@@ -71,63 +69,29 @@ def run_wsgi_request(app, method, path, body=None):
     return response_info["status"], response_info["headers"], response_body
 
 
-class RefreshSettingsTests(unittest.TestCase):
-    def test_parse_refresh_frequency_accepts_dynamic_values(self):
-        self.assertEqual(parseRefreshFrequency("30 minutes"), 1800)
-        self.assertEqual(parseRefreshFrequency("1 hour"), 3600)
-        self.assertEqual(parseRefreshFrequency("6 hours"), 21600)
-        self.assertEqual(parseRefreshFrequency("1 day"), 86400)
-        self.assertEqual(parseRefreshFrequency("7 days"), 604800)
-        self.assertEqual(parseRefreshFrequency("1 week"), 604800)
-        self.assertEqual(parseRefreshFrequency("2 weeks"), 1209600)
-        self.assertEqual(parseRefreshFrequency("15 minutes"), 900)
-        self.assertEqual(parseRefreshFrequency("unknown"), DEFAULT_REFRESH_SECONDS)
-        self.assertEqual(parseRefreshFrequency(""), DEFAULT_REFRESH_SECONDS)
-
-    def test_settings_api_updates_shared_timer_and_persists_setting(self):
+class ScanIntervalTests(unittest.TestCase):
+    def test_scan_interval_is_loaded_from_settings_file(self):
         old_cwd = os.getcwd()
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             try:
                 os.chdir(tmp_dir)
-                shared_state = {"refreshSeconds": DEFAULT_REFRESH_SECONDS}
-                app = createSettingsServer(shared_state, Lock())
+                with open("calendarSettings.json", "w", encoding="utf-8") as settings_file:
+                    json.dump({"scanIntervalSeconds": 42}, settings_file)
 
-                status, _, body = run_wsgi_request(
-                    app,
-                    "POST",
-                    "/api/settings/refresh-frequency",
-                    {"refreshFrequency": "30 minutes"},
-                )
-
-                self.assertTrue(status.startswith("200"))
-                self.assertEqual(shared_state["refreshSeconds"], 1800)
-                self.assertTrue(os.path.exists("calendar_settings.json"))
-                self.assertEqual(json.loads(body)["refreshSeconds"], 1800)
-
-                get_status, _, get_body = run_wsgi_request(
-                    app,
-                    "GET",
-                    "/api/settings/refresh-frequency",
-                )
-                self.assertTrue(get_status.startswith("200"))
-                self.assertEqual(json.loads(get_body)["refreshSeconds"], 1800)
+                self.assertEqual(loadScanIntervalSeconds(), 42)
             finally:
                 os.chdir(old_cwd)
 
-    def test_settings_api_rejects_invalid_payload(self):
-        shared_state = {"refreshSeconds": DEFAULT_REFRESH_SECONDS}
-        app = createSettingsServer(shared_state, Lock())
+    def test_scan_interval_defaults_to_one_hour_when_missing(self):
+        old_cwd = os.getcwd()
 
-        status, _, body = run_wsgi_request(
-            app,
-            "POST",
-            "/api/settings/refresh-frequency",
-            {},
-        )
-
-        self.assertTrue(status.startswith("400"))
-        self.assertEqual(json.loads(body)["error"], "refreshFrequency must be a string")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            try:
+                os.chdir(tmp_dir)
+                self.assertEqual(loadScanIntervalSeconds(), DEFAULT_SCAN_INTERVAL_SECONDS)
+            finally:
+                os.chdir(old_cwd)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,14 @@
+{
+
+    "theme": "light",
+    "calTheme": "default",
+
+    "wakeUp": true,
+    "wakeUpTime": "08:00",  
+    "wakeUpMinutes": 10,
+
+    "scanIntervalSeconds": 3600,
+
+    "calendarStyle": "wholeMonth",
+    "calendarMaxEvents": 10
+}

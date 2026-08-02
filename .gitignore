@@ -1,17 +1,26 @@
+# ── Google OAuth secrets (never commit these) ────────────────────────────────
 credentials.json
 token.json
 
-node_modules/
-
-
+# ── Python ───────────────────────────────────────────────────────────────────
 .venv/
-frontend/node_modules/
-frontend/dist/
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
 
-# Logs
-logs
+# ── Node / Electron (calendar-pi-frontend) ───────────────────────────────────
+calendar-pi-frontend/node_modules/
+calendar-pi-frontend/.webpack/
+calendar-pi-frontend/out/
+calendar-pi-frontend/.cache/
+
+# ── Build output ─────────────────────────────────────────────────────────────
+dist/
+dist-ssr/
+build/Release/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -19,18 +28,64 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# ── Environment & local config ────────────────────────────────────────────────
+.env
+.env.*
 *.local
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# ── Testing & coverage ────────────────────────────────────────────────────────
+coverage/
+*.lcov
+.nyc_output/
+
+# ── Misc tooling caches ───────────────────────────────────────────────────────
+.npm/
+.eslintcache
+.yarn-integrity
+*.tsbuildinfo
+jspm_packages/
+typings/
+
+# ── OS files ─────────────────────────────────────────────────────────────────
 .DS_Store
+Thumbs.db
+
+# ── Editor directories ────────────────────────────────────────────────────────
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+.vscode/*
+!.vscode/extensions.json
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+
+# next.js build output
+.next
+
+# nuxt.js build output
+.nuxt
+
+# vuepress build output
+.vuepress/dist
+
+# Serverless directories
+.serverless/
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files
+.dynamodb/
+
+# Webpack
+.webpack/
+
+# Vite
+.vite/
+
+# Electron-Forge
+out/
