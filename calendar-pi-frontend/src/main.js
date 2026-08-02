@@ -1,5 +1,6 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('node:path');
+const fs = require('node:fs');
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
@@ -9,10 +10,14 @@ if (require('electron-squirrel-startup')) {
 const createWindow = () => {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: 1280,
+    height: 800,
+    minWidth: 1024,
+    minHeight: 700,
     webPreferences: {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
+      nodeIntegration: false,
+      contextIsolation: true,
     },
   });
 
@@ -36,6 +41,33 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+});
+
+// IPC handlers for reading backend configuration files
+ipcMain.handle('read-settings', async () => {
+  try {
+    const backendPath = path.join(__dirname, '../../../backend/calendarSettings.json');
+    const data = fs.readFileSync(backendPath, 'utf-8');
+    return JSON.parse(data);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      return { wakeUpTime: '08:00', weatherLocation: 'San Luis Obispo, CA, USA' };
+    }
+    throw new Error(`Failed to read settings: ${err.message}`);
+  }
+});
+
+ipcMain.handle('read-events', async () => {
+  try {
+    const backendPath = path.join(__dirname, '../../../backend/calendarEvents.json');
+    const data = fs.readFileSync(backendPath, 'utf-8');
+    return JSON.parse(data);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      return [];
+    }
+    throw new Error(`Failed to read events: ${err.message}`);
+  }
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common

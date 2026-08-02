@@ -32,6 +32,7 @@ module.exports = {
     {
       name: '@electron-forge/plugin-webpack',
       config: {
+        devContentSecurityPolicy: "default-src 'self' 'unsafe-inline' data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' https://api.open-meteo.com https://geocoding-api.open-meteo.com ws://localhost:* http://localhost:*;",
         mainConfig: './webpack.main.config.js',
         renderer: {
           config: './webpack.renderer.config.js',

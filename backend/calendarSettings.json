@@ -10,5 +10,7 @@
     "scanIntervalSeconds": 3600,
 
     "calendarStyle": "wholeMonth",
-    "calendarMaxEvents": 10
+    "calendarMaxEvents": 10,
+
+    "weatherLocation": "San Luis Obispo, CA, USA"
 }

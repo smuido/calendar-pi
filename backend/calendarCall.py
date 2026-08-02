@@ -80,6 +80,58 @@ def fetchEvents(service, calendarId, style: str, maxResults=100):
   return events_result.get("items", [])
 
 
+# Where today's events are written so the frontend can read them.
+EVENTS_FILE = "calendarEvents.json"
+
+
+def eventsForFrontend(rawEvents):
+  """Convert raw Google Calendar events into the shape the frontend's daily
+  view expects: { title, startHour, startMinute, endHour, endMinute, location },
+  keeping only events that start and end on today's local date."""
+
+  today = datetime.datetime.now().date()
+  frontendEvents = []
+
+  for event in rawEvents:
+    startInfo = event.get("start", {})
+    endInfo = event.get("end", {})
+
+    # Skip all-day events (they only have a "date", not a "dateTime").
+    if "dateTime" not in startInfo or "dateTime" not in endInfo:
+      continue
+
+    start = datetime.datetime.fromisoformat(startInfo["dateTime"]).astimezone()
+    end = datetime.datetime.fromisoformat(endInfo["dateTime"]).astimezone()
+
+    if start.date() != today:
+      continue
+
+    frontendEvents.append({
+        "title": event.get("summary", "(No title)"),
+        "startHour": start.hour,
+        "startMinute": start.minute,
+        "endHour": end.hour,
+        "endMinute": end.minute,
+        "location": event.get("location", ""),
+    })
+
+  return frontendEvents
+
+
+def writeTodaysEvents(service, calendars):
+  """Fetch today's events across all calendars and write them to EVENTS_FILE."""
+  todaysEvents = []
+
+  for calendar in calendars:
+    rawEvents = fetchEvents(service, calendar["id"], style="fullMonth")
+    todaysEvents.extend(eventsForFrontend(rawEvents))
+
+  with open(EVENTS_FILE, "w", encoding="utf-8") as events_file:
+    json.dump(todaysEvents, events_file)
+
+  return todaysEvents
+
+
 
 def main():
   """Authenticate with Google Calendar and poll all calendars for upcoming events."""
@@ -108,22 +160,17 @@ def main():
     service = build("calendar", "v3", credentials=creds)
 
     while True:
-      # Wait the configured number of seconds before scanning again.
-      time.sleep(loadScanIntervalSeconds())
-
-      # This is the start of one polling cycle.
-      print(f"Refreshing calendar view at {datetime.datetime.now(tz=datetime.timezone.utc).isoformat()}")
-
-      # Load every calendar the account can see.
+      # Load every calendar the account can see and write today's events to
+      # EVENTS_FILE so the frontend can pick them up on its next load.
       calendars = fetchCals(service)
+      print(f"Refreshing calendar view at {datetime.datetime.now(tz=datetime.timezone.utc).isoformat()}")
       print(f"Found {len(calendars)} calendars")
 
-      # Fetch and print the events for each calendar returned above.
-      for calendar in calendars:
-        events = fetchEvents(service, calendar["id"], style="fullMonth")
-        for event in events:
-          start = event["start"].get("dateTime", event["start"].get("date"))
-          print(start, event["summary"])
+      todaysEvents = writeTodaysEvents(service, calendars)
+      print(f"Wrote {len(todaysEvents)} events for today to {EVENTS_FILE}")
+
+      # Wait the configured number of seconds before scanning again.
+      time.sleep(loadScanIntervalSeconds())
 
   except HttpError as error:
     # Surface API failures instead of crashing silently.
