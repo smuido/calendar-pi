@@ -1,19 +1,24 @@
 {
     "theme": "light",
     "calTheme": "default",
+
     "wakeUp": true,
     "wakeUpTime": "08:00",
     "wakeUpMinutes": 10,
+
     "scanIntervalSeconds": 3600,
     "calendarStyle": "wholeMonth",
     "calendarMaxEvents": 10,
     "firstDayOfWeek": "Sunday",
     "workWeekView": false,
+
     "weatherLocation": "San Luis Obispo, CA, USA",
-    "TimeFormat": "12h",
+    "timeZone": "America/Los_Angeles",
+
+    "TimeFormat": "24h",
     "DarkModeTimeFrame": {
         "start": "21:00",
-        "end": "07:00"
-    },
+        "end": "07:00"},
+    
     "followedCalendars": []
 }
