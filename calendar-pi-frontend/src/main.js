@@ -1,12 +1,18 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const { spawn } = require('node:child_process');
 
 const SETTINGS_PATH = path.join(__dirname, '../../../backend/calendarSettings.json');
 const CALENDARS_PATH = path.join(__dirname, '../../../backend/calendarCalendars.json');
 const CALENDARS_REFRESH_PATH = path.join(__dirname, '../../../backend/calendarCalendars.refresh');
+const TOKEN_PATH = path.join(__dirname, '../../../backend/token.json');
+const BACKEND_DIR = path.join(__dirname, '../../../backend');
+const PYTHON_SCRIPT = path.join(BACKEND_DIR, 'calendarCall.py');
+const VENV_PYTHON_PATH = path.join(__dirname, '../../../.venv/Scripts/python.exe');
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DEFAULT_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+let backendProcess = null;
 
 function normalizeFirstDayOfWeek(value) {
   if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 6) {
@@ -62,6 +68,64 @@ function bumpCalendarsRefreshToken() {
   return token;
 }
 
+function startBackendPoller() {
+  if (backendProcess) {
+    return;
+  }
+
+  const pythonCommand = fs.existsSync(VENV_PYTHON_PATH) ? VENV_PYTHON_PATH : 'python';
+  backendProcess = spawn(pythonCommand, [PYTHON_SCRIPT], {
+    cwd: BACKEND_DIR,
+    stdio: 'pipe',
+    windowsHide: true,
+  });
+
+  backendProcess.stdout.on('data', (chunk) => {
+    console.log(`[calendarCall] ${String(chunk).trim()}`);
+  });
+
+  backendProcess.stderr.on('data', (chunk) => {
+    console.error(`[calendarCall] ${String(chunk).trim()}`);
+  });
+
+  backendProcess.on('exit', (code, signal) => {
+    console.log(`[calendarCall] exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})`);
+    backendProcess = null;
+  });
+
+  backendProcess.on('error', (error) => {
+    console.error('[calendarCall] failed to start:', error);
+    backendProcess = null;
+  });
+}
+
+function stopBackendPoller() {
+  if (!backendProcess) {
+    return;
+  }
+
+  const processToStop = backendProcess;
+  backendProcess = null;
+
+  if (process.platform === 'win32') {
+    const killer = spawn('taskkill', ['/pid', String(processToStop.pid), '/T', '/F'], {
+      windowsHide: true,
+      stdio: 'ignore',
+    });
+    killer.on('error', (error) => {
+      console.error('[calendarCall] failed to stop with taskkill:', error);
+    });
+    return;
+  }
+
+  processToStop.kill('SIGTERM');
+}
+
+function restartBackendPoller() {
+  stopBackendPoller();
+  startBackendPoller();
+}
+
 function broadcastSettingsUpdate(settings) {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) {
@@ -113,6 +177,9 @@ const createWindow = () => {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  if (fs.existsSync(TOKEN_PATH)) {
+    startBackendPoller();
+  }
   startSettingsWatcher();
   createWindow();
 
@@ -170,6 +237,39 @@ ipcMain.handle('refresh-calendars', async () => {
   }
 });
 
+ipcMain.handle('start-login', async () => {
+  try {
+    if (!fs.existsSync(TOKEN_PATH)) {
+      restartBackendPoller();
+    }
+
+    return { ok: true, started: !fs.existsSync(TOKEN_PATH) };
+  } catch (err) {
+    throw new Error(`Failed to start login flow: ${err.message}`);
+  }
+});
+
+ipcMain.handle('get-auth-status', async () => {
+  try {
+    return { loggedIn: fs.existsSync(TOKEN_PATH) };
+  } catch (err) {
+    throw new Error(`Failed to read auth status: ${err.message}`);
+  }
+});
+
+ipcMain.handle('delete-token', async () => {
+  try {
+    if (fs.existsSync(TOKEN_PATH)) {
+      fs.unlinkSync(TOKEN_PATH);
+      return { ok: true, deleted: true };
+    }
+
+    return { ok: true, deleted: false };
+  } catch (err) {
+    throw new Error(`Failed to delete token: ${err.message}`);
+  }
+});
+
 ipcMain.handle('write-settings', async (_, settingsPayload) => {
   try {
     const rawTimeFormat = settingsPayload?.TimeFormat;
@@ -223,9 +323,14 @@ ipcMain.handle('write-settings', async (_, settingsPayload) => {
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   fs.unwatchFile(SETTINGS_PATH);
+  stopBackendPoller();
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('before-quit', () => {
+  stopBackendPoller();
 });
 
 // In this file you can include the rest of your app's specific main process

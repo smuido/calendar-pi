@@ -15,22 +15,108 @@ SETTINGS_FILE = "calendarSettings.json"
 CALENDARS_FILE = "calendarCalendars.json"
 CALENDARS_REFRESH_FILE = "calendarCalendars.refresh"
 DEFAULT_SCAN_INTERVAL_SECONDS = 3600
+DEFAULT_CALENDAR_MAX_EVENTS = 100
+
+
+def loadSettings() -> dict:
+  """Read calendarSettings.json, returning an empty object on failure."""
+  if not os.path.exists(SETTINGS_FILE):
+    return {}
+
+  try:
+    with open(SETTINGS_FILE, "r", encoding="utf-8") as settings_file:
+      payload = json.load(settings_file)
+      return payload if isinstance(payload, dict) else {}
+  except (json.JSONDecodeError, OSError):
+    return {}
 
 
 def loadScanIntervalSeconds() -> int:
   """Read the scan interval from calendarSettings.json, or fall back to one hour."""
-  if not os.path.exists(SETTINGS_FILE):
-    return DEFAULT_SCAN_INTERVAL_SECONDS
-
   try:
-    # The settings file stores the polling interval in seconds.
-    with open(SETTINGS_FILE, "r", encoding="utf-8") as settings_file:
-      payload = json.load(settings_file)
-
+    payload = loadSettings()
     scan_interval_seconds = int(payload.get("scanIntervalSeconds", DEFAULT_SCAN_INTERVAL_SECONDS))
     return max(1, scan_interval_seconds)
-  except (TypeError, ValueError, json.JSONDecodeError, OSError):
+  except (TypeError, ValueError):
     return DEFAULT_SCAN_INTERVAL_SECONDS
+
+
+def loadCalendarStyle(settingsPayload: dict) -> str:
+  """Map frontend calendarStyle values into backend fetch styles."""
+  style = settingsPayload.get("calendarStyle")
+  if style == "monthFromToday":
+    return "monthFromToday"
+  return "fullMonth"
+
+
+def loadCalendarMaxEvents(settingsPayload: dict) -> int:
+  """Read max events per calendar from settings with sane bounds."""
+  try:
+    value = int(settingsPayload.get("calendarMaxEvents", DEFAULT_CALENDAR_MAX_EVENTS))
+    return min(max(1, value), 500)
+  except (TypeError, ValueError):
+    return DEFAULT_CALENDAR_MAX_EVENTS
+
+
+def loadFollowedCalendarNames(settingsPayload: dict) -> set[str]:
+  """Return normalized followed calendar names selected in settings."""
+  followed = settingsPayload.get("followedCalendars")
+  if not isinstance(followed, list):
+    return set()
+
+  return {
+      str(name).strip().lower()
+      for name in followed
+      if isinstance(name, str) and name.strip()
+  }
+
+
+def filterCalendarsForPolling(calendars, followedCalendarNames):
+  """Filter calendars to only selected names; empty selection means no calendars."""
+  if not followedCalendarNames:
+    return []
+
+  return [
+      calendar for calendar in calendars
+      if str(calendar.get("summary", "")).strip().lower() in followedCalendarNames
+  ]
+
+
+def loadGoogleColorMaps(service):
+  """Load Google Calendar/Event color palettes keyed by colorId."""
+  try:
+    payload = service.colors().get().execute()
+    event_colors = {
+        str(color_id): color_data.get("background")
+        for color_id, color_data in (payload.get("event", {}) or {}).items()
+        if isinstance(color_data, dict) and color_data.get("background")
+    }
+    calendar_colors = {
+        str(color_id): color_data.get("background")
+        for color_id, color_data in (payload.get("calendar", {}) or {}).items()
+        if isinstance(color_data, dict) and color_data.get("background")
+    }
+    return event_colors, calendar_colors
+  except HttpError as error:
+    print(f"Failed to load Google color maps: {error}")
+    return {}, {}
+
+
+def resolveEventColor(rawEvent, calendar, eventColorsById, calendarColorsById):
+  """Resolve final display color with event color first, then calendar color."""
+  event_color_id = str(rawEvent.get("colorId", "")).strip()
+  if event_color_id and event_color_id in eventColorsById:
+    return eventColorsById[event_color_id]
+
+  calendar_color_id = str(calendar.get("colorId", "")).strip()
+  if calendar_color_id and calendar_color_id in calendarColorsById:
+    return calendarColorsById[calendar_color_id]
+
+  calendar_background = calendar.get("backgroundColor")
+  if isinstance(calendar_background, str) and calendar_background.strip():
+    return calendar_background.strip()
+
+  return "#1a73e8"
 
 # Fetches a list of calendars from the user's account.
 def fetchCals(service):
@@ -135,13 +221,13 @@ def fetchEvents(service, calendarId, style: str, maxResults=100):
 EVENTS_FILE = "calendarEvents.json"
 
 
-def eventsForFrontend(rawEvents):
+def eventsForFrontend(rawEvents, calendar, eventColorsById, calendarColorsById):
   """Convert raw Google Calendar events into the shape the frontend's daily
-  view expects: { title, startHour, startMinute, endHour, endMinute, location },
-  keeping only events that start and end on today's local date."""
+  view expects: { title, date, startHour, startMinute, endHour, endMinute, location },
+  using local machine time for consistent rendering in all calendar views."""
 
-  today = datetime.datetime.now().date()
   frontendEvents = []
+  calendar_name = calendar.get("summary", "(Unnamed calendar)")
 
   for event in rawEvents:
     startInfo = event.get("start", {})
@@ -153,34 +239,40 @@ def eventsForFrontend(rawEvents):
 
     start = datetime.datetime.fromisoformat(startInfo["dateTime"]).astimezone()
     end = datetime.datetime.fromisoformat(endInfo["dateTime"]).astimezone()
-
-    if start.date() != today:
-      continue
+    event_color = resolveEventColor(event, calendar, eventColorsById, calendarColorsById)
 
     frontendEvents.append({
         "title": event.get("summary", "(No title)"),
+        "date": start.date().isoformat(),
+        "start": start.isoformat(),
+        "end": end.isoformat(),
         "startHour": start.hour,
         "startMinute": start.minute,
         "endHour": end.hour,
         "endMinute": end.minute,
         "location": event.get("location", ""),
+        "calendarName": calendar_name,
+        "color": event_color,
     })
 
   return frontendEvents
 
 
-def writeTodaysEvents(service, calendars):
-  """Fetch today's events across all calendars and write them to EVENTS_FILE."""
-  todaysEvents = []
+def writeEventsForFrontend(service, calendars, fetchStyle, maxResults):
+  """Fetch events across selected calendars and write them to EVENTS_FILE."""
+  frontendEvents = []
+  eventColorsById, calendarColorsById = loadGoogleColorMaps(service)
 
   for calendar in calendars:
-    rawEvents = fetchEvents(service, calendar["id"], style="fullMonth")
-    todaysEvents.extend(eventsForFrontend(rawEvents))
+    rawEvents = fetchEvents(service, calendar["id"], style=fetchStyle, maxResults=maxResults)
+    frontendEvents.extend(eventsForFrontend(rawEvents, calendar, eventColorsById, calendarColorsById))
+
+  frontendEvents.sort(key=lambda event: (event.get("start", ""), event.get("title", "")))
 
   with open(EVENTS_FILE, "w", encoding="utf-8") as events_file:
-    json.dump(todaysEvents, events_file)
+    json.dump(frontendEvents, events_file)
 
-  return todaysEvents
+  return frontendEvents
 
 
 
@@ -214,15 +306,25 @@ def main():
     while True:
       # Load every calendar the account can see and write today's events to
       # EVENTS_FILE so the frontend can pick them up on its next load.
+      settingsPayload = loadSettings()
+      fetchStyle = loadCalendarStyle(settingsPayload)
+      maxEventsPerCalendar = loadCalendarMaxEvents(settingsPayload)
+      followedCalendarNames = loadFollowedCalendarNames(settingsPayload)
+
       calendars = fetchCals(service)
+      polledCalendars = filterCalendarsForPolling(calendars, followedCalendarNames)
       print(f"Refreshing calendar view at {datetime.datetime.now(tz=datetime.timezone.utc).isoformat()}")
       print(f"Found {len(calendars)} calendars")
+      if followedCalendarNames:
+        print(f"Polling {len(polledCalendars)} selected calendars")
+      else:
+        print("No calendars selected in settings; polling no calendars")
 
       calendarNames = writeCalendarsForFrontend(calendars)
       print(f"Wrote {len(calendarNames)} calendar names to {CALENDARS_FILE}")
 
-      todaysEvents = writeTodaysEvents(service, calendars)
-      print(f"Wrote {len(todaysEvents)} events for today to {EVENTS_FILE}")
+      frontendEvents = writeEventsForFrontend(service, polledCalendars, fetchStyle, maxEventsPerCalendar)
+      print(f"Wrote {len(frontendEvents)} events to {EVENTS_FILE}")
 
       # Wait the configured number of seconds before scanning again.
       shouldRefresh, lastRefreshToken = waitForNextScanOrRefresh(

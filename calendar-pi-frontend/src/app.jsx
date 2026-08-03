@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import GoodMorning from './screens/goodMorning.jsx';
+import LoginScreen from './screens/login.jsx';
 import MonthView from './screens/monthView.jsx';
 import SettingsScreen from './screens/settings.jsx';
 import WeekView from './screens/weekView.jsx';
@@ -136,8 +137,55 @@ export default function App() {
     const [settings, setSettings] = useState(DEFAULT_SETTINGS);
     const [activeView, setActiveView] = useState('month');
     const [now, setNow] = useState(() => new Date());
+    const [authChecked, setAuthChecked] = useState(false);
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [isWakeUpDismissed, setIsWakeUpDismissed] = useState(false);
+    const [lastViewBeforeWakeUp, setLastViewBeforeWakeUp] = useState('month');
+    const wasWakeUpWindowActiveRef = useRef(false);
 
     useEffect(() => {
+        let cancelled = false;
+
+        async function refreshAuthStatus() {
+            if (typeof window.electronAPI?.getAuthStatus !== 'function') {
+                if (!cancelled) {
+                    setIsLoggedIn(false);
+                    setAuthChecked(true);
+                }
+                return;
+            }
+
+            try {
+                const result = await window.electronAPI.getAuthStatus();
+                if (!cancelled) {
+                    setIsLoggedIn(Boolean(result?.loggedIn));
+                    setAuthChecked(true);
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    console.error('Failed to read auth status:', error);
+                    setIsLoggedIn(false);
+                    setAuthChecked(true);
+                }
+            }
+        }
+
+        void refreshAuthStatus();
+        const intervalId = setInterval(() => {
+            void refreshAuthStatus();
+        }, 3000);
+
+        return () => {
+            cancelled = true;
+            clearInterval(intervalId);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!authChecked || !isLoggedIn) {
+            return;
+        }
+
         // Read wakeUpTime and weather location from calendarSettings.json at startup.
         // The path is relative to the app's working directory (project root).
         window.electronAPI.readSettings()
@@ -155,9 +203,13 @@ export default function App() {
                 // Log the real failure reason instead of silently keeping defaults.
                 console.error('Failed to load calendarSettings.json:', err);
             });
-    }, []);
+    }, [authChecked, isLoggedIn]);
 
     useEffect(() => {
+        if (!authChecked || !isLoggedIn) {
+            return undefined;
+        }
+
         if (typeof window.electronAPI?.onSettingsUpdated !== 'function') {
             return undefined;
         }
@@ -174,18 +226,38 @@ export default function App() {
                 unsubscribe();
             }
         };
-    }, []);
+    }, [authChecked, isLoggedIn]);
 
     useEffect(() => {
-        // Read today's events written by calendarCall.py's polling loop.
-        window.electronAPI.readEvents()
-            .then(data => {
-                if (Array.isArray(data)) setEvents(data);
-            })
-            .catch(err => {
-                console.error('Failed to load calendarEvents.json:', err);
-            });
-    }, []);
+        if (!authChecked || !isLoggedIn) {
+            return undefined;
+        }
+
+        let cancelled = false;
+
+        async function refreshEvents() {
+            try {
+                const data = await window.electronAPI.readEvents();
+                if (!cancelled && Array.isArray(data)) {
+                    setEvents(data);
+                }
+            } catch (err) {
+                if (!cancelled) {
+                    console.error('Failed to load calendarEvents.json:', err);
+                }
+            }
+        }
+
+        void refreshEvents();
+        const intervalId = setInterval(() => {
+            void refreshEvents();
+        }, 30_000);
+
+        return () => {
+            cancelled = true;
+            clearInterval(intervalId);
+        };
+    }, [authChecked, isLoggedIn]);
 
     useEffect(() => {
         const id = setInterval(() => {
@@ -207,13 +279,37 @@ export default function App() {
         setActiveView(view);
     };
 
-    const shouldShowWakeUpView = Boolean(settings.wakeUp)
-        && activeView === 'month'
+    const wakeUpWindowActive = Boolean(settings.wakeUp)
         && isInWakeUpWindow(now, settings.wakeUpTime, settings.wakeUpMinutes);
+
+    useEffect(() => {
+        if (wakeUpWindowActive && !wasWakeUpWindowActiveRef.current) {
+            setLastViewBeforeWakeUp(activeView);
+        }
+
+        if (!wakeUpWindowActive) {
+            setIsWakeUpDismissed(false);
+        }
+
+        wasWakeUpWindowActiveRef.current = wakeUpWindowActive;
+    }, [wakeUpWindowActive, activeView]);
+
+    function handleDismissWakeUp() {
+        setIsWakeUpDismissed(true);
+        setActiveView(lastViewBeforeWakeUp || 'month');
+    }
+
+    const shouldShowWakeUpView = wakeUpWindowActive && !isWakeUpDismissed;
 
 
     let content;
-    if (activeView === 'settings') {
+    if (!authChecked) {
+        content = null;
+    } else if (!isLoggedIn) {
+        content = <LoginScreen />;
+    } else if (shouldShowWakeUpView) {
+        content = <GoodMorning wakeUpHour={wakeUpHour} locationName={locationName} events={events} timeFormat={settings.TimeFormat} />;
+    } else if (activeView === 'settings') {
         content = (
             <SettingsScreen
                 initialSettings={settings}
@@ -231,8 +327,6 @@ export default function App() {
                 workWeekView={Boolean(settings.workWeekView)}
             />
         );
-    } else if (shouldShowWakeUpView) {
-        content = <GoodMorning wakeUpHour={wakeUpHour} locationName={locationName} events={events} timeFormat={settings.TimeFormat} />;
     } else {
         content = (
             <MonthView
@@ -244,53 +338,85 @@ export default function App() {
         );
     }
 
+    if (!authChecked || !isLoggedIn) {
+        return <div>{content}</div>;
+    }
+
     return (
         <div style={{ position: 'relative' }}>
-            <button
-                type="button"
-                onClick={() => handleViewChange(activeView === 'week' ? 'month' : 'week')}
-                style={{
-                    position: 'fixed',
-                    top: 16,
-                    left: 16,
-                    zIndex: 30,
-                    border: '1px solid #c8d8ef',
-                    background: activeView === 'month' || activeView === 'week' ? '#e8f0fe' : '#ffffff',
-                    color: activeView === 'month' || activeView === 'week' ? '#1a73e8' : '#334155',
-                    borderRadius: 999,
-                    padding: '12px 20px',
-                    minWidth: 140,
-                    fontSize: 15,
-                    fontWeight: 600,
-                    boxShadow: '0 10px 24px rgba(32, 56, 89, 0.12)',
-                    cursor: 'pointer',
-                }}
-            >
-                Change View
-            </button>
+            {shouldShowWakeUpView ? (
+                <button
+                    type="button"
+                    onClick={handleDismissWakeUp}
+                    aria-label="Close Good Morning"
+                    style={{
+                        position: 'fixed',
+                        top: 16,
+                        right: 16,
+                        zIndex: 30,
+                        width: 44,
+                        height: 44,
+                        border: '1px solid #c8d8ef',
+                        background: '#ffffff',
+                        color: '#334155',
+                        borderRadius: 999,
+                        fontSize: 20,
+                        fontWeight: 600,
+                        boxShadow: '0 10px 24px rgba(32, 56, 89, 0.12)',
+                        cursor: 'pointer',
+                    }}
+                >
+                    ×
+                </button>
+            ) : (
+                <>
+                    <button
+                        type="button"
+                        onClick={() => handleViewChange(activeView === 'week' ? 'month' : 'week')}
+                        style={{
+                            position: 'fixed',
+                            top: 16,
+                            left: 16,
+                            zIndex: 30,
+                            border: '1px solid #c8d8ef',
+                            background: activeView === 'month' || activeView === 'week' ? '#e8f0fe' : '#ffffff',
+                            color: activeView === 'month' || activeView === 'week' ? '#1a73e8' : '#334155',
+                            borderRadius: 999,
+                            padding: '12px 20px',
+                            minWidth: 140,
+                            fontSize: 15,
+                            fontWeight: 600,
+                            boxShadow: '0 10px 24px rgba(32, 56, 89, 0.12)',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        Change View
+                    </button>
 
-            <button
-                type="button"
-                onClick={() => handleViewChange('settings')}
-                style={{
-                    position: 'fixed',
-                    top: 16,
-                    right: 16,
-                    zIndex: 30,
-                    border: '1px solid #c8d8ef',
-                    background: activeView === 'settings' ? '#e8f0fe' : '#ffffff',
-                    color: activeView === 'settings' ? '#1a73e8' : '#334155',
-                    borderRadius: 999,
-                    padding: '12px 20px',
-                    minWidth: 140,
-                    fontSize: 15,
-                    fontWeight: 600,
-                    boxShadow: '0 10px 24px rgba(32, 56, 89, 0.12)',
-                    cursor: 'pointer',
-                }}
-            >
-                Settings
-            </button>
+                    <button
+                        type="button"
+                        onClick={() => handleViewChange('settings')}
+                        style={{
+                            position: 'fixed',
+                            top: 16,
+                            right: 16,
+                            zIndex: 30,
+                            border: '1px solid #c8d8ef',
+                            background: activeView === 'settings' ? '#e8f0fe' : '#ffffff',
+                            color: activeView === 'settings' ? '#1a73e8' : '#334155',
+                            borderRadius: 999,
+                            padding: '12px 20px',
+                            minWidth: 140,
+                            fontSize: 15,
+                            fontWeight: 600,
+                            boxShadow: '0 10px 24px rgba(32, 56, 89, 0.12)',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        Settings
+                    </button>
+                </>
+            )}
 
             {content}
         </div>

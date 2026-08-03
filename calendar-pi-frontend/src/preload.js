@@ -8,6 +8,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 	readEvents: () => ipcRenderer.invoke('read-events'),
 	readCalendars: () => ipcRenderer.invoke('read-calendars'),
 	refreshCalendars: () => ipcRenderer.invoke('refresh-calendars'),
+	startLogin: () => ipcRenderer.invoke('start-login'),
+	getAuthStatus: () => ipcRenderer.invoke('get-auth-status'),
+	deleteToken: () => ipcRenderer.invoke('delete-token'),
 	writeSettings: (settingsPayload) => ipcRenderer.invoke('write-settings', settingsPayload),
 	onSettingsUpdated: (callback) => {
 		const listener = (_event, settingsPayload) => callback(settingsPayload);

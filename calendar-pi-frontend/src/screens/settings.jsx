@@ -43,7 +43,7 @@ function normalizeTimeZone(value) {
 	}
 }
 
-function buildTimeZoneOptions(selectedTimeZone) {
+function buildTimeZoneGroups(selectedTimeZone) {
 	const preferred = normalizeTimeZone(selectedTimeZone);
 	const zoneSet = new Set([preferred, 'UTC']);
 
@@ -57,7 +57,47 @@ function buildTimeZoneOptions(selectedTimeZone) {
 		}
 	}
 
-	return Array.from(zoneSet).sort((a, b) => a.localeCompare(b));
+	const sortedZones = Array.from(zoneSet).sort((a, b) => a.localeCompare(b));
+	const grouped = new Map();
+
+	for (const zoneName of sortedZones) {
+		const [region] = zoneName.split('/');
+		const groupName = region || 'Other';
+		if (!grouped.has(groupName)) {
+			grouped.set(groupName, []);
+		}
+		grouped.get(groupName).push(zoneName);
+	}
+
+	const preferredRegionOrder = [
+		'Africa',
+		'America',
+		'Antarctica',
+		'Arctic',
+		'Asia',
+		'Atlantic',
+		'Australia',
+		'Europe',
+		'Indian',
+		'Pacific',
+		'Etc',
+		'UTC',
+		'Other',
+	];
+
+	const orderedGroupNames = Array.from(grouped.keys()).sort((a, b) => {
+		const aIndex = preferredRegionOrder.indexOf(a);
+		const bIndex = preferredRegionOrder.indexOf(b);
+		if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
+		if (aIndex === -1) return 1;
+		if (bIndex === -1) return -1;
+		return aIndex - bIndex;
+	});
+
+	return orderedGroupNames.map((groupName) => ({
+		label: groupName,
+		zones: grouped.get(groupName) ?? [],
+	}));
 }
 
 const DEFAULT_SETTINGS = {
@@ -109,7 +149,7 @@ function normalizeSettings(input) {
 
 export default function SettingsScreen({ initialSettings, onSave, onBack }) {
 	const [form, setForm] = useState(() => normalizeSettings(initialSettings));
-	const timeZoneOptions = buildTimeZoneOptions(form.timeZone);
+	const timeZoneGroups = buildTimeZoneGroups(form.timeZone);
 	const [availableCalendars, setAvailableCalendars] = useState([]);
 	const [isCalendarsOpen, setIsCalendarsOpen] = useState(false);
 	const [isRefreshingCalendars, setIsRefreshingCalendars] = useState(false);
@@ -119,6 +159,7 @@ export default function SettingsScreen({ initialSettings, onSave, onBack }) {
 	const calendarsDropdownRef = useRef(null);
 	const autosaveTimerRef = useRef(null);
 	const saveQueueRef = useRef(Promise.resolve());
+	const selectedCalendars = form.followedCalendars.filter((calendarName) => typeof calendarName === 'string' && calendarName.trim());
 
 	useEffect(() => {
 		const normalized = normalizeSettings(initialSettings);
@@ -288,6 +329,25 @@ export default function SettingsScreen({ initialSettings, onSave, onBack }) {
 		setStatus('Reset to default settings.');
 	}
 
+	async function handleLogout() {
+		if (typeof window.electronAPI?.deleteToken !== 'function') {
+			setStatus('Logout is unavailable in this build.');
+			return;
+		}
+
+		setStatus('Logging out...');
+		try {
+			const result = await window.electronAPI.deleteToken();
+			if (result?.deleted) {
+				setStatus('Logged out. token.json was deleted.');
+			} else {
+				setStatus('Already logged out. token.json was not found.');
+			}
+		} catch (error) {
+			setStatus(`Logout failed: ${error.message}`);
+		}
+	}
+
 	return (
 		<div className="settings-root">
 			<header className="settings-header">
@@ -414,30 +474,37 @@ export default function SettingsScreen({ initialSettings, onSave, onBack }) {
 								className="settings-dropdown-button"
 								onClick={toggleCalendarsDropdown}
 								disabled={isRefreshingCalendars}
+								aria-expanded={isCalendarsOpen}
 							>
-								<span>
-									{isRefreshingCalendars
-										? 'Refreshing calendars...'
-										: form.followedCalendars.length > 0
-											? `${form.followedCalendars.length} calendar${form.followedCalendars.length === 1 ? '' : 's'} selected`
-											: 'Choose calendars'}
+								<span className="settings-dropdown-copy">
+									<span className="settings-dropdown-value">
+										{isRefreshingCalendars
+											? 'Refreshing calendars...'
+											: selectedCalendars.length > 0
+												? `${selectedCalendars.length} calendar${selectedCalendars.length === 1 ? '' : 's'} selected`
+												: 'Choose calendars'}
+									</span>
 								</span>
 								<span className={`settings-dropdown-caret ${isCalendarsOpen ? 'is-open' : ''}`}>⌄</span>
 							</button>
 							{isCalendarsOpen && (
 								<div className="settings-dropdown-panel" role="listbox" aria-multiselectable="true">
+									<div className="settings-dropdown-panel-header">
+										<span>Available calendars</span>
+										<span>{selectedCalendars.length} selected</span>
+									</div>
 									{availableCalendars.length > 0 ? (
 										availableCalendars.map((calendarName) => {
-											const checked = form.followedCalendars.includes(calendarName);
+											const checked = selectedCalendars.includes(calendarName);
 											return (
-												<label key={calendarName} className="settings-dropdown-item">
-													<input
-														type="checkbox"
-														checked={checked}
-														onChange={() => toggleFollowedCalendar(calendarName)}
-													/>
-													<span>{calendarName}</span>
-												</label>
+												<button
+													type="button"
+													className={`settings-dropdown-item ${checked ? 'is-selected' : ''}`}
+													onClick={() => toggleFollowedCalendar(calendarName)}
+													aria-pressed={checked}
+												>
+													<span className="settings-dropdown-item-name">{calendarName}</span>
+												</button>
 											);
 										})
 									) : (
@@ -461,8 +528,12 @@ export default function SettingsScreen({ initialSettings, onSave, onBack }) {
 							value={form.timeZone}
 							onChange={(event) => updateField('timeZone', event.target.value)}
 						>
-							{timeZoneOptions.map((zoneName) => (
-								<option key={zoneName} value={zoneName}>{zoneName}</option>
+							{timeZoneGroups.map((group) => (
+								<optgroup key={group.label} label={group.label}>
+									{group.zones.map((zoneName) => (
+										<option key={zoneName} value={zoneName}>{zoneName}</option>
+									))}
+								</optgroup>
 							))}
 						</select>
 					</label>
@@ -504,6 +575,13 @@ export default function SettingsScreen({ initialSettings, onSave, onBack }) {
 						onClick={() => { void handleResetToDefaults(); }}
 					>
 						Reset
+					</button>
+					<button
+						type="button"
+						className="settings-logout"
+						onClick={() => { void handleLogout(); }}
+					>
+						Logout
 					</button>
 					<span className="settings-status" aria-live="polite">{status}</span>
 				</div>
