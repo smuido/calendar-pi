@@ -6,4 +6,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
 	readSettings: () => ipcRenderer.invoke('read-settings'),
 	readEvents: () => ipcRenderer.invoke('read-events'),
+	writeSettings: (settingsPayload) => ipcRenderer.invoke('write-settings', settingsPayload),
+	onSettingsUpdated: (callback) => {
+		const listener = (_event, settingsPayload) => callback(settingsPayload);
+		ipcRenderer.on('settings-updated', listener);
+		return () => ipcRenderer.removeListener('settings-updated', listener);
+	},
 });

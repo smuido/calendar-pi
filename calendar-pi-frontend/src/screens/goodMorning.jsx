@@ -22,7 +22,7 @@ function eventGeometry(startHour, startMinute, endHour, endMinute, wakeUpHour) {
 
 function getWeatherSymbol(weatherCode) {
     if (weatherCode === 0) return '☀';
-    if ([1, 2, 3].includes(weatherCode)) return '☁';
+    if (weatherCode < 4 && weatherCode > 0) return '☁';
     if ([45, 48].includes(weatherCode)) return '〰';
     if ([51, 53, 55, 56, 57, 61, 63, 65, 80, 81, 82].includes(weatherCode)) return '☂';
     if ([66, 67, 71, 73, 75, 77, 85, 86].includes(weatherCode)) return '❄';
@@ -41,10 +41,10 @@ function getWeatherLabel(weatherCode) {
 }
 
 // wakeUpHour: 0-23 integer parsed from calendarSettings.json "wakeUpTime".
-// Defaults to 8 (8 AM) if not provided.
+// Defaults to 7 (7 AM) if not provided.
 // locationName: city name string parsed from calendarSettings.json
 // "weatherLocation", geocoded to coordinates and used to fetch local weather.
-export default function GoodMorning({ events = [], wakeUpHour = 8, locationName }) {
+export default function GoodMorning({ events = [], wakeUpHour = 7, locationName }) {
     const now = new Date();
     const [currentMinute, setCurrentMinute] = useState(
         now.getHours() * 60 + now.getMinutes()

@@ -12,5 +12,14 @@
     "calendarStyle": "wholeMonth",
     "calendarMaxEvents": 10,
 
-    "weatherLocation": "San Luis Obispo, CA, USA"
+    "weatherLocation": "San Luis Obispo, CA, USA",
+
+    "TimeFormat": "12h",
+    "DarkModeTimeFrame": {
+        "start": "21:00",
+        "end": "07:00"
+    },
+
+    "followedCalendars": [
+    ]
 }
