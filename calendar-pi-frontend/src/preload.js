@@ -6,6 +6,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
 	readSettings: () => ipcRenderer.invoke('read-settings'),
 	readEvents: () => ipcRenderer.invoke('read-events'),
+	readCalendars: () => ipcRenderer.invoke('read-calendars'),
+	refreshCalendars: () => ipcRenderer.invoke('refresh-calendars'),
 	writeSettings: (settingsPayload) => ipcRenderer.invoke('write-settings', settingsPayload),
 	onSettingsUpdated: (callback) => {
 		const listener = (_event, settingsPayload) => callback(settingsPayload);

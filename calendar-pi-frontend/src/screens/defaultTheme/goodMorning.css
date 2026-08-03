@@ -148,6 +148,13 @@
     position: relative;
 }
 
+.dc-gutter-end-label {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
+
 .dc-hour-label {
     position: absolute;
     top: 0;
@@ -156,8 +163,15 @@
     color: #70757a;
     text-transform: uppercase;
     letter-spacing: 0.4px;
-    /* center the label directly on the hour line (cell's top border) */
     transform: translateY(-50%);
+}
+
+.dc-hour-label.is-first {
+    transform: translateY(0);
+}
+
+.dc-hour-label.is-last {
+    transform: translateY(-100%);
 }
 
 /* ── Day column ──────────────────────────────────────────────── */

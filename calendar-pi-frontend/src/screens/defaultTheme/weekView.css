@@ -1,0 +1,176 @@
+.wv-root {
+    --wv-line: #d7e3f1;
+    --wv-line-soft: #e4ecf7;
+    --wv-line-faint: #f0f4fa;
+    --wv-text: #1f2937;
+    --wv-text-muted: #5f6b7a;
+    --wv-brand: #1a73e8;
+    --wv-header-bg: #f9fbff;
+    --wv-surface: #ffffff;
+    --wv-today-bg: #fafcff;
+    padding: 44px 20px 72px;
+}
+
+.wv-header-card {
+    width: min(100%, 520px);
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: 16px;
+    border-radius: 16px;
+    border: 1px solid var(--wv-line);
+    background: linear-gradient(145deg, #ffffff 0%, #f6f9ff 100%);
+    box-shadow: 0 10px 30px rgba(37, 68, 112, 0.08);
+    padding: 14px 18px;
+    text-align: center;
+}
+
+.wv-header-title {
+    margin: 0;
+    font-size: 40px;
+    line-height: 1.1;
+    color: var(--wv-text);
+    font-weight: 700;
+}
+
+.wv-shell {
+    background: var(--wv-surface);
+    border: 1px solid var(--wv-line);
+    border-radius: 14px;
+    box-shadow: 0 8px 26px rgba(32, 56, 89, 0.08);
+    overflow: hidden;
+}
+
+.wv-day-header-row,
+.wv-grid {
+    display: grid;
+    grid-template-columns: 76px repeat(var(--wv-days), minmax(110px, 1fr));
+}
+
+.wv-day-header-row {
+    border-bottom: 1px solid var(--wv-line-soft);
+    background: var(--wv-header-bg);
+}
+
+.wv-gutter-header-spacer {
+    border-right: 1px solid var(--wv-line-soft);
+}
+
+.wv-day-header-cell {
+    padding: 10px 8px;
+    border-right: 1px solid var(--wv-line-soft);
+    text-align: center;
+    color: #334155;
+}
+
+.wv-day-header-cell.is-today {
+    color: var(--wv-brand);
+}
+
+.wv-day-header-name {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.wv-day-date-pill {
+    width: 28px;
+    height: 28px;
+    margin: 2px auto 0;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    background: transparent;
+    color: inherit;
+}
+
+.wv-day-date-pill.is-today {
+    background: var(--wv-brand);
+    color: #fff;
+}
+
+.wv-body-scroll {
+    max-height: none;
+    overflow: visible;
+}
+
+.wv-hour-gutter {
+    position: relative;
+    border-right: 1px solid var(--wv-line-soft);
+}
+
+.wv-hour-label {
+    position: absolute;
+    top: var(--hour-top);
+    right: 8px;
+    color: #64748b;
+    font-size: 11px;
+    user-select: none;
+}
+
+.wv-hour-label.is-first {
+    top: 2px;
+}
+
+.wv-hour-label.is-last {
+    transform: translateY(-100%);
+}
+
+.wv-day-column {
+    position: relative;
+    border-right: 1px solid var(--wv-line-soft);
+    background: #fff;
+}
+
+.wv-day-column.is-today {
+    background: var(--wv-today-bg);
+}
+
+.wv-hour-line {
+    position: absolute;
+    top: var(--line-top);
+    left: 0;
+    right: 0;
+    border-top: 1px solid var(--wv-line-faint);
+}
+
+.wv-event {
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    top: var(--event-top);
+    height: var(--event-height);
+    border-radius: 8px;
+    padding: 4px 6px;
+    font-size: 12px;
+    line-height: 1.2;
+    color: #fff;
+    background: var(--event-bg);
+    overflow: hidden;
+    z-index: 1;
+}
+
+.wv-event-title {
+    font-weight: 600;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+.wv-event-location {
+    opacity: 0.85;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+@media (max-width: 920px) {
+    .wv-root {
+        padding: 28px 12px 72px;
+    }
+
+    .wv-header-title {
+        font-size: 32px;
+    }
+}

@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import './goodMorning.css';
+import './defaultTheme/goodMorning.css';
 
 // Height in pixels of each one-hour row in the grid.
 const HOUR_HEIGHT = 60;
 
-// Format a 0-23 hour number into a 12-hour label (e.g. 0 → "12 AM", 13 → "1 PM").
-function formatHourLabel(hour) {
-    if (hour === 0)  return '12 AM';
-    if (hour < 12)  return `${hour} AM`;
+// Format a 0-23 hour number according to selected format.
+function formatHourLabel(hour, timeFormat) {
+    if (timeFormat === '24h') {
+        return `${String(hour).padStart(2, '0')}:00`;
+    }
+
+    if (hour === 0) return '12 AM';
+    if (hour < 12) return `${hour} AM`;
     if (hour === 12) return '12 PM';
     return `${hour - 12} PM`;
 }
@@ -44,7 +48,7 @@ function getWeatherLabel(weatherCode) {
 // Defaults to 7 (7 AM) if not provided.
 // locationName: city name string parsed from calendarSettings.json
 // "weatherLocation", geocoded to coordinates and used to fetch local weather.
-export default function GoodMorning({ events = [], wakeUpHour = 7, locationName }) {
+export default function GoodMorning({ events = [], wakeUpHour = 7, locationName, timeFormat = '12h' }) {
     const now = new Date();
     const [currentMinute, setCurrentMinute] = useState(
         now.getHours() * 60 + now.getMinutes()
@@ -114,7 +118,7 @@ export default function GoodMorning({ events = [], wakeUpHour = 7, locationName 
 
     const greeting = now.getHours() < 12 ? 'Good Morning' : 'Good Afternoon';
 
-    // Visible hours: wakeUpHour through 23 (nearly midnight).
+    // Visible hours: wakeUpHour through 23, plus an explicit midnight end label.
     const hours = Array.from({ length: 24 - wakeUpHour }, (_, i) => wakeUpHour + i);
 
     return (
@@ -146,12 +150,18 @@ export default function GoodMorning({ events = [], wakeUpHour = 7, locationName 
                         <div className="dc-gutter">
                             {hours.map((h, idx) => (
                                 <div key={h} className="dc-gutter-cell">
-                                    {/* Hide the label on the very first row so it doesn't clip */}
-                                    {idx !== 0 && (
-                                        <span className="dc-hour-label">{formatHourLabel(h)}</span>
-                                    )}
+                                    <span
+                                        className={`dc-hour-label ${idx === 0 ? 'is-first' : ''}`}
+                                    >
+                                        {formatHourLabel(h, timeFormat)}
+                                    </span>
                                 </div>
                             ))}
+                            <div className="dc-gutter-end-label">
+                                <span className="dc-hour-label is-last">
+                                    {formatHourLabel(24, timeFormat)}
+                                </span>
+                            </div>
                         </div>
 
                         {/* Day column */}
@@ -166,6 +176,11 @@ export default function GoodMorning({ events = [], wakeUpHour = 7, locationName 
                                     />
                                 )
                             ))}
+
+                            <div
+                                className="dc-hour-line"
+                                style={{ top: hours.length * HOUR_HEIGHT }}
+                            />
 
                             {/* Half-hour lines — lighter, anchored at the midpoint of each hour */}
                             {hours.map((h, idx) => (

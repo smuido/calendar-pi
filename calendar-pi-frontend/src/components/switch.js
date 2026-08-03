@@ -1,7 +1,9 @@
-import React from "react";
+import React, { useId } from "react";
 import './switch.css';
 
-const Switch = ({ isOn, handleToggle, checked, onChange }) => {
+const Switch = ({ isOn, handleToggle, checked, onChange, id }) => {
+  const autoId = useId();
+  const switchId = id ?? autoId;
   const resolvedIsOn = typeof isOn === 'boolean' ? isOn : Boolean(checked);
   const resolvedHandleToggle = typeof handleToggle === 'function' ? handleToggle : onChange;
 
@@ -11,13 +13,13 @@ const Switch = ({ isOn, handleToggle, checked, onChange }) => {
         checked={resolvedIsOn}
         onChange={resolvedHandleToggle}
         className="react-switch-checkbox"
-        id={`react-switch-new`}
+        id={switchId}
         type="checkbox"
       />
       <label
         style={{ background: resolvedIsOn ? '#06D6A0' : undefined }}
         className="react-switch-label"
-        htmlFor={`react-switch-new`}
+        htmlFor={switchId}
         >
         
         <span className={`react-switch-button`} />

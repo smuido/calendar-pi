@@ -3,10 +3,63 @@ const path = require('node:path');
 const fs = require('node:fs');
 
 const SETTINGS_PATH = path.join(__dirname, '../../../backend/calendarSettings.json');
+const CALENDARS_PATH = path.join(__dirname, '../../../backend/calendarCalendars.json');
+const CALENDARS_REFRESH_PATH = path.join(__dirname, '../../../backend/calendarCalendars.refresh');
+const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DEFAULT_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+
+function normalizeFirstDayOfWeek(value) {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 6) {
+    return DAYS_OF_WEEK[value];
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const exactMatch = DAYS_OF_WEEK.find((day) => day.toLowerCase() === trimmed.toLowerCase());
+    if (exactMatch) return exactMatch;
+
+    const abbreviations = {
+      sun: 'Sunday',
+      mon: 'Monday',
+      tue: 'Tuesday',
+      wed: 'Wednesday',
+      thu: 'Thursday',
+      fri: 'Friday',
+      sat: 'Saturday',
+    };
+    const short = trimmed.slice(0, 3).toLowerCase();
+    if (abbreviations[short]) return abbreviations[short];
+  }
+
+  return 'Sunday';
+}
+
+function normalizeTimeZone(value) {
+  const candidate = typeof value === 'string' ? value.trim() : '';
+  if (!candidate) return DEFAULT_TIME_ZONE;
+
+  try {
+    Intl.DateTimeFormat('en-US', { timeZone: candidate });
+    return candidate;
+  } catch (_error) {
+    return DEFAULT_TIME_ZONE;
+  }
+}
 
 function readSettingsFromDisk() {
   const data = fs.readFileSync(SETTINGS_PATH, 'utf-8');
   return JSON.parse(data);
+}
+
+function readCalendarsFromDisk() {
+  const data = fs.readFileSync(CALENDARS_PATH, 'utf-8');
+  return JSON.parse(data);
+}
+
+function bumpCalendarsRefreshToken() {
+  const token = `${Date.now()}:${Math.random().toString(36).slice(2)}`;
+  fs.writeFileSync(CALENDARS_REFRESH_PATH, token, 'utf-8');
+  return token;
 }
 
 function broadcastSettingsUpdate(settings) {
@@ -97,8 +150,44 @@ ipcMain.handle('read-events', async () => {
   }
 });
 
+ipcMain.handle('read-calendars', async () => {
+  try {
+    const calendars = readCalendarsFromDisk();
+    return Array.isArray(calendars) ? calendars : [];
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      return [];
+    }
+    throw new Error(`Failed to read calendars: ${err.message}`);
+  }
+});
+
+ipcMain.handle('refresh-calendars', async () => {
+  try {
+    return { ok: true, token: bumpCalendarsRefreshToken() };
+  } catch (err) {
+    throw new Error(`Failed to request calendar refresh: ${err.message}`);
+  }
+});
+
 ipcMain.handle('write-settings', async (_, settingsPayload) => {
   try {
+    const rawTimeFormat = settingsPayload?.TimeFormat;
+    const rawFirstDayOfWeek = settingsPayload?.firstDayOfWeek;
+    const rawWorkWeekView = settingsPayload?.workWeekView;
+    const rawTimeZone = settingsPayload?.timeZone;
+    const normalizedTimeFormat = rawTimeFormat === '24h' || rawTimeFormat === '12h'
+      ? rawTimeFormat
+      : (rawTimeFormat === 'enabled' || rawTimeFormat === true ? '24h' : '12h');
+    const normalizedFirstDayOfWeek = normalizeFirstDayOfWeek(rawFirstDayOfWeek);
+    const normalizedWorkWeekView = Boolean(rawWorkWeekView);
+    const normalizedTimeZone = normalizeTimeZone(rawTimeZone);
+    const normalizedFollowedCalendars = Array.isArray(settingsPayload?.followedCalendars)
+      ? settingsPayload.followedCalendars
+          .map((value) => typeof value === 'string' ? value.trim() : '')
+          .filter(Boolean)
+      : [];
+
     const normalizedSettings = {
       theme: settingsPayload?.theme ?? 'light',
       calTheme: settingsPayload?.calTheme ?? 'default',
@@ -108,18 +197,20 @@ ipcMain.handle('write-settings', async (_, settingsPayload) => {
       scanIntervalSeconds: Number(settingsPayload?.scanIntervalSeconds ?? 3600),
       calendarStyle: settingsPayload?.calendarStyle ?? 'wholeMonth',
       calendarMaxEvents: Number(settingsPayload?.calendarMaxEvents ?? 10),
+      firstDayOfWeek: normalizedFirstDayOfWeek,
+      workWeekView: normalizedWorkWeekView,
       weatherLocation: settingsPayload?.weatherLocation ?? 'San Luis Obispo, CA, USA',
-      TimeFormat: settingsPayload?.TimeFormat ?? '12h',
+      timeZone: normalizedTimeZone,
+      TimeFormat: normalizedTimeFormat,
       DarkModeTimeFrame: {
         start: settingsPayload?.DarkModeTimeFrame?.start ?? '21:00',
         end: settingsPayload?.DarkModeTimeFrame?.end ?? '07:00',
       },
-      followedCalendars: Array.isArray(settingsPayload?.followedCalendars)
-        ? settingsPayload.followedCalendars
-        : [],
+      followedCalendars: normalizedFollowedCalendars,
     };
 
     fs.writeFileSync(SETTINGS_PATH, `${JSON.stringify(normalizedSettings, null, 4)}\n`, 'utf-8');
+    bumpCalendarsRefreshToken();
     broadcastSettingsUpdate(normalizedSettings);
     return { ok: true };
   } catch (err) {

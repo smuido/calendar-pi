@@ -12,6 +12,8 @@ from googleapiclient.errors import HttpError
 # If modifying these scopes, delete the file token.json.
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 SETTINGS_FILE = "calendarSettings.json"
+CALENDARS_FILE = "calendarCalendars.json"
+CALENDARS_REFRESH_FILE = "calendarCalendars.refresh"
 DEFAULT_SCAN_INTERVAL_SECONDS = 3600
 
 
@@ -37,6 +39,55 @@ def fetchCals(service):
   # Ask the Google Calendar API for the user's calendar list.
   calList = service.calendarList().list().execute()
   return calList.get("items", [])
+
+
+def writeCalendarsForFrontend(calendars):
+  """Write calendar names to CALENDARS_FILE so the frontend can populate its dropdown."""
+
+  calendarNames = []
+  seenNames = set()
+
+  for calendar in calendars:
+    name = calendar.get("summary", "(Unnamed calendar)")
+    if name in seenNames:
+      continue
+    seenNames.add(name)
+    calendarNames.append(name)
+
+  with open(CALENDARS_FILE, "w", encoding="utf-8") as calendars_file:
+    json.dump(calendarNames, calendars_file)
+
+  return calendarNames
+
+
+def readCalendarRefreshToken():
+  """Return the latest refresh token written by the frontend, if any."""
+
+  if not os.path.exists(CALENDARS_REFRESH_FILE):
+    return None
+
+  try:
+    with open(CALENDARS_REFRESH_FILE, "r", encoding="utf-8") as refresh_file:
+      return refresh_file.read().strip() or None
+  except OSError:
+    return None
+
+
+def waitForNextScanOrRefresh(scanIntervalSeconds, lastRefreshToken):
+  """Sleep until the next scan, or return early when the frontend requests a refresh."""
+
+  elapsedSeconds = 0
+  currentToken = lastRefreshToken
+
+  while elapsedSeconds < scanIntervalSeconds:
+    time.sleep(1)
+    elapsedSeconds += 1
+
+    nextToken = readCalendarRefreshToken()
+    if nextToken != currentToken:
+      return True, nextToken
+
+  return False, currentToken
 
 
 # Fetches the next 100 events on the user's primary calendar.
@@ -158,6 +209,7 @@ def main():
   try:
     # Build the API client once and reuse it inside the polling loop.
     service = build("calendar", "v3", credentials=creds)
+    lastRefreshToken = readCalendarRefreshToken()
 
     while True:
       # Load every calendar the account can see and write today's events to
@@ -166,11 +218,20 @@ def main():
       print(f"Refreshing calendar view at {datetime.datetime.now(tz=datetime.timezone.utc).isoformat()}")
       print(f"Found {len(calendars)} calendars")
 
+      calendarNames = writeCalendarsForFrontend(calendars)
+      print(f"Wrote {len(calendarNames)} calendar names to {CALENDARS_FILE}")
+
       todaysEvents = writeTodaysEvents(service, calendars)
       print(f"Wrote {len(todaysEvents)} events for today to {EVENTS_FILE}")
 
       # Wait the configured number of seconds before scanning again.
-      time.sleep(loadScanIntervalSeconds())
+      shouldRefresh, lastRefreshToken = waitForNextScanOrRefresh(
+          loadScanIntervalSeconds(),
+          lastRefreshToken,
+      )
+      if shouldRefresh:
+        print("Frontend requested an immediate calendar refresh")
+        continue
 
   except HttpError as error:
     # Surface API failures instead of crashing silently.
