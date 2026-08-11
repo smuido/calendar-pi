@@ -1,20 +1,33 @@
 {
     "theme": "light",
     "calTheme": "default",
+
     "wakeUp": true,
+<<<<<<< HEAD
     "wakeUpTime": "09:00",
     "wakeUpMinutes": 5,
+=======
+    "wakeUpTime": "08:00",
+    "wakeUpMinutes": 10,
+
+>>>>>>> 12ce440aef8890f90bbb5e5624a683176c3de262
     "scanIntervalSeconds": 3600,
     "calendarStyle": "wholeMonth",
     "calendarMaxEvents": 10,
     "firstDayOfWeek": "Sunday",
     "workWeekView": false,
+
     "weatherLocation": "San Luis Obispo, CA, USA",
     "timeZone": "America/Los_Angeles",
+<<<<<<< HEAD
     "TimeFormat": "12h",
+=======
+
+    "TimeFormat": "24h",
+>>>>>>> 12ce440aef8890f90bbb5e5624a683176c3de262
     "DarkModeTimeFrame": {
         "start": "21:00",
-        "end": "07:00"
-    },
+        "end": "07:00"},
+    
     "followedCalendars": []
 }
