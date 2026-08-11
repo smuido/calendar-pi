@@ -13,20 +13,16 @@ Calendar Pi is an Electron and React desktop calendar dashboard backed by a Pyth
 - [Overview](#overview)
 - [Current Status](#current-status)
 - [Features](#features)
-- [Architecture](#architecture)
 - [Project Structure](#project-structure)
 - [Prerequisites](#prerequisites)
 - [Google Calendar Setup](#google-calendar-setup)
 - [Installation](#installation)
 - [Running the Project](#running-the-project)
 - [Configuration](#configuration)
-- [Testing](#testing)
 - [Packaging](#packaging)
 - [Raspberry Pi Notes](#raspberry-pi-notes)
 - [Known Limitations](#known-limitations)
 - [Security and Privacy](#security-and-privacy)
-- [Planned Work](#planned-work)
-- [License](#license)
 
 ## Overview
 
