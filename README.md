@@ -286,7 +286,7 @@ npm run make
 
 The Forge configuration includes makers for Windows Squirrel packages, a macOS ZIP, Debian packages, and RPM packages.
 
-> CAUTION
+> [!CAUTION]
 > The current package configuration only packages the Electron frontend. It does not bundle the Python backend, Python environment, OAuth credentials, token, cache files, or Raspberry Pi startup configuration. The Electron file paths also assume the development repository layout, so generated packages should not be treated as standalone builds yet.
 
 ## Raspberry Pi Notes
