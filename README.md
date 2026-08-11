@@ -152,7 +152,7 @@ https://developers.google.com/workspace/calendar/api/quickstart/python
 7. Place it inside the repository's `backend/` directory:
 
 
-> IMPORTANT
+> [!IMPORTANT]
 > The backend currently requests the full `https://www.googleapis.com/auth/calendar` scope, even though the current implementation only reads calendar data. Only authorize an account you are comfortable using with this development project.
 
 The first backend launch opens a local browser-based authorization flow. After authorization, Google tokens are stored in `backend/token.json` and reused on later launches.
